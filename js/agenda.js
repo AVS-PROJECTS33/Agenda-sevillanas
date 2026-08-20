@@ -7,6 +7,7 @@ const firebaseConfig = {
   appId: "1:651443310469:web:42ab90f18f3f8637d4beec",
   measurementId: "G-27H0WGE3EJ"
 };
+
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 
@@ -25,12 +26,35 @@ const emptyMessage = document.getElementById('empty-message');
 let currentActiveLink = null;
 let todasLasReservas = [];
 
-// Escuchar cambios en tiempo real
+// Delegación de eventos (Borrar, Editar, Guardar)
+if (tbody) {
+    tbody.addEventListener('click', (e) => {
+        const btn = e.target.closest('button');
+        if (!btn) return;
+
+        const docId = btn.getAttribute('data-id');
+        const fecha = btn.getAttribute('data-fecha');
+
+        if (btn.classList.contains('btn-delete')) {
+            if (btn.textContent === 'Cancelar') {
+                loadDataForDate(fecha);
+            } else {
+                deleteRecordJS(docId, fecha);
+            }
+        } else if (btn.classList.contains('btn-edit')) {
+            editRecordJS(btn, docId, fecha);
+        } else if (btn.classList.contains('btn-save')) {
+            saveRecordJS(docId, fecha);
+        }
+    });
+}
+
+// Escuchar Firebase
 db.collection("reservas").onSnapshot((snapshot) => {
     todasLasReservas = [];
     snapshot.forEach(doc => {
         const data = doc.data();
-        data.docId = doc.id; // Guarda el ID real de Firestore
+        data.docId = doc.id; 
         todasLasReservas.push(data);
     });
     if (currentActiveLink) {
@@ -38,25 +62,31 @@ db.collection("reservas").onSnapshot((snapshot) => {
     }
 });
 
-// Render sidebar links
-clases.forEach(fecha => {
-    const li = document.createElement('li');
-    li.textContent = fecha;
-    li.addEventListener('click', () => {
-        if(currentActiveLink) currentActiveLink.classList.remove('active');
-        li.classList.add('active');
-        currentActiveLink = li;
-        loadDataForDate(fecha);
+// Renderizar menú
+if (linksContainer) {
+    clases.forEach(fecha => {
+        const li = document.createElement('li');
+        li.textContent = fecha;
+        li.addEventListener('click', () => {
+            if(currentActiveLink) currentActiveLink.classList.remove('active');
+            li.classList.add('active');
+            currentActiveLink = li;
+            loadDataForDate(fecha);
+        });
+        linksContainer.appendChild(li);
     });
-    linksContainer.appendChild(li);
-});
+
+    if(linksContainer.firstChild) {
+        linksContainer.firstChild.click();
+    }
+}
 
 function loadDataForDate(fecha) {
-    currentTitle.textContent = `Apuntados para el ${fecha}`;
-    const reservas = todasLasReservas;
+    if (!currentTitle || !tbody || !totalCount || !emptyMessage) return;
     
-    // Filter reservas that include this fecha
-    const attendees = reservas.filter(r => (r.fechas || []).includes(fecha));
+    currentTitle.textContent = `Apuntados para el ${fecha}`;
+    
+    const attendees = todasLasReservas.filter(r => (r.fechas || []).includes(fecha));
     
     totalCount.textContent = attendees.length;
     tbody.innerHTML = '';
@@ -71,13 +101,14 @@ function loadDataForDate(fecha) {
         attendees.forEach(a => {
             const tr = document.createElement('tr');
             const realId = a.docId || a.id;
+            
             tr.innerHTML = `
                 <td class="td-nombre">${a.nombre || ''}</td>
                 <td class="td-apellidos">${a.apellidos || ''}</td>
                 <td class="td-telefono">${a.telefono || ''}</td>
                 <td class="actions-cell">
-                    <button class="btn-sm btn-edit" onclick="editRecord(this, '${realId}', '${fecha}')">Editar</button>
-                    <button class="btn-sm btn-delete" onclick="deleteRecord('${realId}', '${fecha}')">Borrar</button>
+                    <button class="btn-sm btn-edit" data-id="${realId}" data-fecha="${fecha}">Editar</button>
+                    <button class="btn-sm btn-delete" data-id="${realId}" data-fecha="${fecha}">Borrar</button>
                 </td>
             `;
             tbody.appendChild(tr);
@@ -85,31 +116,21 @@ function loadDataForDate(fecha) {
     }
 }
 
-// Load first date by default
-if(linksContainer.firstChild) {
-    linksContainer.firstChild.click();
-}
-
-// Funciones de Edición y Borrado
-window.deleteRecord = function(docId, fecha) {
+function deleteRecordJS(docId, fecha) {
     if (confirm("¿Estás seguro de que quieres borrar este registro de este día?")) {
         const reserva = todasLasReservas.find(r => r.docId === docId || r.id === docId);
-        
         if (reserva) {
             const nuevasFechas = (reserva.fechas || []).filter(f => f !== fecha);
-            
             if (nuevasFechas.length === 0) {
-                db.collection("reservas").doc(docId).delete().catch(e => alert("Error borrando: " + e));
+                db.collection("reservas").doc(docId).delete().catch(e => console.error(e));
             } else {
-                db.collection("reservas").doc(docId).update({ fechas: nuevasFechas }).catch(e => alert("Error actualizando: " + e));
+                db.collection("reservas").doc(docId).update({ fechas: nuevasFechas }).catch(e => console.error(e));
             }
-        } else {
-            alert("No se encontró el registro para borrar.");
         }
     }
 }
 
-window.editRecord = function(btn, docId, fecha) {
+function editRecordJS(btn, docId, fecha) {
     const tr = btn.closest('tr');
     const tdNombre = tr.querySelector('.td-nombre');
     const tdApellidos = tr.querySelector('.td-apellidos');
@@ -125,40 +146,42 @@ window.editRecord = function(btn, docId, fecha) {
     tdTelefono.innerHTML = `<input type="text" class="edit-input" value="${currentTelefono}" id="edit-telefono-${docId}">`;
 
     actionsCell.innerHTML = `
-        <button class="btn-sm btn-save" onclick="saveRecord('${docId}', '${fecha}')">Guardar</button>
-        <button class="btn-sm btn-delete" onclick="loadDataForDate('${fecha}')">Cancelar</button>
+        <button class="btn-sm btn-save" data-id="${docId}" data-fecha="${fecha}">Guardar</button>
+        <button class="btn-sm btn-delete" data-id="${docId}" data-fecha="${fecha}">Cancelar</button>
     `;
 }
 
-window.saveRecord = function(docId, fecha) {
-    const nuevoNombre = document.getElementById(`edit-nombre-${docId}`).value;
-    const nuevoApellidos = document.getElementById(`edit-apellidos-${docId}`).value;
-    const nuevoTelefono = document.getElementById(`edit-telefono-${docId}`).value;
+function saveRecordJS(docId, fecha) {
+    const nombreInput = document.getElementById(`edit-nombre-${docId}`);
+    const apellidosInput = document.getElementById(`edit-apellidos-${docId}`);
+    const telefonoInput = document.getElementById(`edit-telefono-${docId}`);
+
+    if (!nombreInput || !apellidosInput || !telefonoInput) return;
 
     db.collection("reservas").doc(docId).update({
-        nombre: nuevoNombre,
-        apellidos: nuevoApellidos,
-        telefono: nuevoTelefono
-    }).catch(e => alert("Error al guardar: " + e));
+        nombre: nombreInput.value,
+        apellidos: apellidosInput.value,
+        telefono: telefonoInput.value
+    }).catch(e => console.error(e));
 }
 
-// Funciones de Exportación
-document.getElementById('btn-export-pdf').addEventListener('click', () => {
+window.exportPDF = function() {
     try {
-        const jsPDF = window.jspdf ? window.jspdf.jsPDF : window.jsPDF;
-        if (!jsPDF) {
-            alert("No se pudo cargar el creador de PDF. Comprueba tu conexión a Internet.");
+        if (!window.jsPDF) {
+            alert("La librería PDF no se cargó.");
             return;
         }
-        const doc = new jsPDF();
         
+        const doc = new jsPDF();
         doc.setFontSize(18);
-        doc.text(`Lista Completa de Asistentes - Sevillanas Dani Candela`, 14, 15);
+        doc.text(`Lista Completa de Asistentes`, 14, 15);
         let currentY = 25;
+        let recordsFound = false;
 
         clases.forEach((fecha) => {
             const attendees = todasLasReservas.filter(r => (r.fechas || []).includes(fecha));
             if (attendees.length > 0) {
+                recordsFound = true;
                 if (currentY > 250) {
                     doc.addPage();
                     currentY = 20;
@@ -170,55 +193,62 @@ document.getElementById('btn-export-pdf').addEventListener('click', () => {
 
                 const tableData = attendees.map(a => [a.nombre || '', a.apellidos || '', a.telefono || '']);
                 
-                doc.autoTable({
-                    startY: currentY,
-                    head: [['Nombre', 'Apellidos', 'Teléfono']],
-                    body: tableData,
-                    theme: 'grid',
-                    headStyles: { fillColor: [217, 4, 41] }
-                });
-                
-                currentY = (doc.lastAutoTable ? doc.lastAutoTable.finalY : currentY + (attendees.length * 10)) + 15;
+                if (typeof doc.autoTable === 'function') {
+                    doc.autoTable({
+                        startY: currentY,
+                        head: [['Nombre', 'Apellidos', 'Teléfono']],
+                        body: tableData,
+                        theme: 'grid',
+                        headStyles: { fillColor: [217, 4, 41] }
+                    });
+                    currentY = doc.previousAutoTable ? doc.previousAutoTable.finalY + 15 : currentY + 15;
+                }
             }
         });
 
-        doc.save(`Asistentes_Globales_Sevillanas.pdf`);
-    } catch (e) {
-        console.error("Error exportando a PDF:", e);
-        alert("Hubo un error exportando el PDF: " + e.message);
-    }
-});
-
-document.getElementById('btn-export-excel').addEventListener('click', () => {
-    try {
-        if (!window.XLSX) {
-            alert("No se pudo cargar la librería Excel. Comprueba tu conexión a Internet.");
-            return;
+        if (recordsFound) {
+            doc.save(`Asistentes_Sevillanas.pdf`);
+        } else {
+            alert("No hay reservas guardadas para descargar.");
         }
-        const workbook = XLSX.utils.book_new();
+    } catch (e) {
+        alert("Fallo generando PDF: " + e.message);
+    }
+};
+
+window.exportExcel = function() {
+    try {
+        let csvContent = "\uFEFF"; // BOM para UTF-8
+        csvContent += "Fecha,Nombre,Apellidos,Telefono\n";
+        
+        let recordsFound = false;
 
         clases.forEach(fecha => {
             const attendees = todasLasReservas.filter(r => (r.fechas || []).includes(fecha));
-            if (attendees.length > 0) {
-                const sheetData = attendees.map(a => ({
-                    "Nombre": a.nombre || '',
-                    "Apellidos": a.apellidos || '',
-                    "Teléfono": a.telefono || ''
-                }));
-                const worksheet = XLSX.utils.json_to_sheet(sheetData);
-                
-                let safeSheetName = fecha.replace(/[\\/*?:\[\]]/g, '').substring(0, 31);
-                XLSX.utils.book_append_sheet(workbook, worksheet, safeSheetName);
-            }
+            attendees.forEach(a => {
+                recordsFound = true;
+                const nombre = (a.nombre || '').replace(/"/g, '""');
+                const apellidos = (a.apellidos || '').replace(/"/g, '""');
+                const telefono = (a.telefono || '').replace(/"/g, '""');
+                csvContent += `"${fecha}","${nombre}","${apellidos}","${telefono}"\n`;
+            });
         });
         
-        if (workbook.SheetNames.length === 0) {
-            XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet([{"Mensaje": "No hay reservas"}]), "Sin Reservas");
+        if (!recordsFound) {
+            alert("No hay reservas guardadas para descargar.");
+            return;
         }
 
-        XLSX.writeFile(workbook, "Asistentes_Globales_Sevillanas.xlsx");
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        link.setAttribute("href", url);
+        link.setAttribute("download", "Asistentes_Sevillanas.csv");
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
     } catch (e) {
-        console.error("Error exportando a Excel:", e);
-        alert("Hubo un error exportando el Excel: " + e.message);
+        alert("Fallo generando Excel: " + e.message);
     }
-});
+};

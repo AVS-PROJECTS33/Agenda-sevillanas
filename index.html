@@ -9,10 +9,9 @@
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/global.css">
     <link rel="stylesheet" href="css/agenda.css">
-    <!-- Librerías para exportar a PDF y Excel -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- Librerías para exportar a PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/1.5.3/jspdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.6/jspdf.plugin.autotable.min.js"></script>
 </head>
 <body class="admin-body">
     <nav class="sidebar">
@@ -30,8 +29,8 @@
                 </div>
             </div>
             <div class="export-actions">
-                <button id="btn-export-pdf" class="btn-action btn-pdf">📄 Descargar PDF</button>
-                <button id="btn-export-excel" class="btn-action btn-excel">📊 Descargar Excel</button>
+                <button id="btn-export-pdf" class="btn-action btn-pdf" onclick="window.exportPDF()">📄 Descargar PDF</button>
+                <button id="btn-export-excel" class="btn-action btn-excel" onclick="window.exportExcel()">📊 Descargar Excel</button>
             </div>
         </header>
         <section class="table-container glass-panel">
@@ -56,6 +55,6 @@
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
     
-    <script src="js/agenda.js"></script>
+    <script src="js/agenda.js?v=6"></script>
 </body>
 </html>
