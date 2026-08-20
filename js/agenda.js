@@ -142,46 +142,73 @@ window.saveRecord = function(id, fecha) {
 
 // Funciones de Exportación
 document.getElementById('btn-export-pdf').addEventListener('click', () => {
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF();
-    const currentFecha = currentActiveLink ? currentActiveLink.textContent : 'Fecha Desconocida';
-    
-    doc.text(`Lista de Asistentes - Sevillanas Dani Candela`, 14, 15);
-    doc.text(`Fecha: ${currentFecha}`, 14, 25);
-    
-    doc.autoTable({
-        html: '#attendees-table',
-        startY: 30,
-        // Only include the first 3 columns, ignore actions
-        columns: [
-            { header: 'Nombre', dataKey: 0 },
-            { header: 'Apellidos', dataKey: 1 },
-            { header: 'Teléfono', dataKey: 2 }
-        ]
-    });
-    
-    doc.save(`Asistentes_${currentFecha.replace(' ', '_')}.pdf`);
+    try {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        
+        doc.setFontSize(18);
+        doc.text(`Lista Completa de Asistentes - Sevillanas Dani Candela`, 14, 15);
+        let startY = 25;
+
+        clases.forEach((fecha) => {
+            const attendees = todasLasReservas.filter(r => r.fechas.includes(fecha));
+            if (attendees.length > 0) {
+                if (startY > 250) {
+                    doc.addPage();
+                    startY = 20;
+                }
+                
+                doc.setFontSize(14);
+                doc.text(`Clase: ${fecha}`, 14, startY);
+                startY += 5;
+
+                const tableData = attendees.map(a => [a.nombre, a.apellidos, a.telefono]);
+                
+                doc.autoTable({
+                    startY: startY,
+                    head: [['Nombre', 'Apellidos', 'Teléfono']],
+                    body: tableData,
+                    theme: 'grid',
+                    headStyles: { fillColor: [217, 4, 41] }
+                });
+                startY = doc.lastAutoTable.finalY + 15;
+            }
+        });
+
+        doc.save(`Asistentes_Globales_Sevillanas.pdf`);
+    } catch (e) {
+        console.error("Error exportando a PDF:", e);
+        alert("Hubo un error exportando el PDF. Asegúrate de tener conexión a Internet para cargar la librería.");
+    }
 });
 
 document.getElementById('btn-export-excel').addEventListener('click', () => {
-    const reservas = todasLasReservas;
-    const flatData = [];
-    
-    // Aplanar datos para que salga una fila por cada persona-día
-    reservas.forEach(r => {
-        r.fechas.forEach(fecha => {
-            flatData.push({
-                "Fecha de Clase": fecha,
-                "Nombre": r.nombre,
-                "Apellidos": r.apellidos,
-                "Teléfono": r.telefono
-            });
+    try {
+        const workbook = XLSX.utils.book_new();
+
+        clases.forEach(fecha => {
+            const attendees = todasLasReservas.filter(r => r.fechas.includes(fecha));
+            if (attendees.length > 0) {
+                const sheetData = attendees.map(a => ({
+                    "Nombre": a.nombre,
+                    "Apellidos": a.apellidos,
+                    "Teléfono": a.telefono
+                }));
+                const worksheet = XLSX.utils.json_to_sheet(sheetData);
+                
+                // Nombre de hoja seguro para Excel
+                let safeSheetName = fecha.replace(/[\\/*?:\[\]]/g, '').substring(0, 31);
+                XLSX.utils.book_append_sheet(workbook, worksheet, safeSheetName);
+            }
         });
-    });
-    
-    const worksheet = XLSX.utils.json_to_sheet(flatData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Reservas");
-    
-    XLSX.writeFile(workbook, "Reservas_Dani_Candela_Global.xlsx");
+        
+        if (workbook.SheetNames.length === 0) {
+            XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet([{"Mensaje": "No hay reservas en ninguna clase."}]), "Sin Reservas");
+        }
+
+        XLSX.writeFile(workbook, "Asistentes_Globales_Sevillanas.xlsx");
+    } catch (e) {
+        console.error("Error exportando a Excel:", e);
+        alert("Hubo un error exportando el Excel. Asegúrate de tener conexión a Internet para cargar la librería.");
+    }
 });
