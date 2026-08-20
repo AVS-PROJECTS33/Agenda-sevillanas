@@ -1,3 +1,15 @@
+const firebaseConfig = {
+  apiKey: "AIzaSyAJzOyvSjg85atJtE5K0jiKzREt-peiPbs",
+  authDomain: "sevillanas-candelas.firebaseapp.com",
+  projectId: "sevillanas-candelas",
+  storageBucket: "sevillanas-candelas.firebasestorage.app",
+  messagingSenderId: "651443310469",
+  appId: "1:651443310469:web:42ab90f18f3f8637d4beec",
+  measurementId: "G-27H0WGE3EJ"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
 const clases = [
     "8 octubre", "12 noviembre", "17 diciembre", 
     "29 enero", "25 febrero", "25 marzo", 
@@ -11,6 +23,18 @@ const totalCount = document.getElementById('total-count');
 const emptyMessage = document.getElementById('empty-message');
 
 let currentActiveLink = null;
+let todasLasReservas = [];
+
+// Escuchar cambios en tiempo real
+db.collection("reservas").onSnapshot((snapshot) => {
+    todasLasReservas = [];
+    snapshot.forEach(doc => {
+        todasLasReservas.push(doc.data());
+    });
+    if (currentActiveLink) {
+        loadDataForDate(currentActiveLink.textContent);
+    }
+});
 
 // Render sidebar links
 clases.forEach(fecha => {
@@ -27,7 +51,7 @@ clases.forEach(fecha => {
 
 function loadDataForDate(fecha) {
     currentTitle.textContent = `Apuntados para el ${fecha}`;
-    const reservas = JSON.parse(localStorage.getItem('reservas_sevillanas') || '[]');
+    const reservas = todasLasReservas;
     
     // Filter reservas that include this fecha
     const attendees = reservas.filter(r => r.fechas.includes(fecha));
@@ -64,27 +88,24 @@ if(linksContainer.firstChild) {
 }
 
 // Funciones de Edición y Borrado
-function deleteRecord(id, fecha) {
+window.deleteRecord = function(id, fecha) {
     if (confirm("¿Estás seguro de que quieres borrar este registro de este día?")) {
-        let reservas = JSON.parse(localStorage.getItem('reservas_sevillanas') || '[]');
-        const index = reservas.findIndex(r => r.id === id);
+        const index = todasLasReservas.findIndex(r => r.id === id);
         
         if (index !== -1) {
-            // Remove the specific date
-            reservas[index].fechas = reservas[index].fechas.filter(f => f !== fecha);
+            const reserva = todasLasReservas[index];
+            const nuevasFechas = reserva.fechas.filter(f => f !== fecha);
             
-            // If no dates left, remove user completely
-            if (reservas[index].fechas.length === 0) {
-                reservas.splice(index, 1);
+            if (nuevasFechas.length === 0) {
+                db.collection("reservas").doc(id).delete();
+            } else {
+                db.collection("reservas").doc(id).update({ fechas: nuevasFechas });
             }
-            
-            localStorage.setItem('reservas_sevillanas', JSON.stringify(reservas));
-            loadDataForDate(fecha); // reload table
         }
     }
 }
 
-function editRecord(btn, id, fecha) {
+window.editRecord = function(btn, id, fecha) {
     const tr = btn.closest('tr');
     const tdNombre = tr.querySelector('.td-nombre');
     const tdApellidos = tr.querySelector('.td-apellidos');
@@ -107,20 +128,16 @@ function editRecord(btn, id, fecha) {
     `;
 }
 
-function saveRecord(id, fecha) {
+window.saveRecord = function(id, fecha) {
     const nuevoNombre = document.getElementById(`edit-nombre-${id}`).value;
     const nuevoApellidos = document.getElementById(`edit-apellidos-${id}`).value;
     const nuevoTelefono = document.getElementById(`edit-telefono-${id}`).value;
 
-    let reservas = JSON.parse(localStorage.getItem('reservas_sevillanas') || '[]');
-    const index = reservas.findIndex(r => r.id === id);
-    if (index !== -1) {
-        reservas[index].nombre = nuevoNombre;
-        reservas[index].apellidos = nuevoApellidos;
-        reservas[index].telefono = nuevoTelefono;
-        localStorage.setItem('reservas_sevillanas', JSON.stringify(reservas));
-    }
-    loadDataForDate(fecha);
+    db.collection("reservas").doc(id).update({
+        nombre: nuevoNombre,
+        apellidos: nuevoApellidos,
+        telefono: nuevoTelefono
+    });
 }
 
 // Funciones de Exportación
@@ -147,7 +164,7 @@ document.getElementById('btn-export-pdf').addEventListener('click', () => {
 });
 
 document.getElementById('btn-export-excel').addEventListener('click', () => {
-    const reservas = JSON.parse(localStorage.getItem('reservas_sevillanas') || '[]');
+    const reservas = todasLasReservas;
     const flatData = [];
     
     // Aplanar datos para que salga una fila por cada persona-día
